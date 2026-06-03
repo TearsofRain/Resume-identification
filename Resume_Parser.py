@@ -842,7 +842,6 @@ class Parser:
 # ===================== 报告生成类 =====================
 class ReportGenerator:
     """
-    v3修改重点：
     1. 岗位推荐表不显示 0 分岗位。
     2. 若某候选人所有岗位都是 0 分，则该候选人在推荐表中不展示，避免出现误导性的 0 分可培养。
     3. 可视化图表改成上下两行展示，不再左右并排。
@@ -1164,10 +1163,17 @@ class ReportGenerator:
         print(f"已导出 JSON: {output_path}")
 
     def skill_statistics(self, resumes):
-        counter = Counter()
+        all_skills = []
         for resume in resumes:
-            counter.update(resume.skills)
-        return counter
+            all_skills.extend(resume.skills)
+
+        if not all_skills:
+            return Counter()
+
+        skills_np = np.array(all_skills)
+        unique_skills, counts = np.unique(skills_np, return_counts=True)
+
+        return Counter(dict(zip(unique_skills, counts)))
 
     def overview_statistics(self, resumes, matching_result):
         total = len(resumes)
@@ -1203,55 +1209,88 @@ class ReportGenerator:
 
     def plot_skill_dist(self, resumes, save_path):
         counter = self.skill_statistics(resumes)
-
         if not counter:
             return False
 
-        items = counter.most_common(25)
-        labels = [x[0] for x in items][::-1]
-        values = [x[1] for x in items][::-1]
+        items = counter.most_common()
+        labels = [x[0] for x in items]
+        values = [x[1] for x in items]
+        n_skills = len(labels)
 
-        height = max(8, len(labels) * 0.55 + 2)
-        plt.figure(figsize=(14, height))
-        bars = plt.barh(labels, values, color="#2563EB", alpha=0.88, height=0.58)
+        width = min(max(5, n_skills * 0.32 + 1.5), 16)
+        height = 5.2
 
-        plt.title("Top 技能/能力出现频次", fontsize=24, pad=22, weight="bold")
-        plt.xlabel("出现次数", fontsize=16, labelpad=12)
-        plt.ylabel("技能/能力名称", fontsize=16, labelpad=12)
-        plt.xticks(fontsize=13)
-        plt.yticks(fontsize=14)
-        plt.grid(axis="x", linestyle="--", alpha=0.25)
+        with plt.rc_context({
+            'font.sans-serif': ['PingFang SC', 'Microsoft YaHei', 'SimHei', 'DejaVu Sans'],
+            'axes.unicode_minus': False,
+            'font.family': 'sans-serif',
+            'savefig.dpi': 140,
+            'savefig.bbox': 'tight',
+            'savefig.facecolor': 'white'
+        }):
+            fig, ax = plt.subplots(figsize=(width, height), facecolor='#FAFAFA')
+            ax.set_facecolor('#FAFAFA')
 
-        ax = plt.gca()
-        ax.spines["top"].set_visible(False)
-        ax.spines["right"].set_visible(False)
-        ax.spines["left"].set_alpha(0.25)
-        ax.spines["bottom"].set_alpha(0.25)
 
-        max_value = max(values) if values else 1
-        plt.xlim(0, max_value + max(1, max_value * 0.18))
+            colors = plt.cm.Blues(np.linspace(0.6, 0.92, n_skills))
+            bars = ax.bar(labels, values, color=colors, width=0.65, edgecolor='none', zorder=3)
 
-        for bar in bars:
-            width = bar.get_width()
-            plt.text(
-                width + max(0.05, max_value * 0.015),
-                bar.get_y() + bar.get_height() / 2,
-                str(int(width)),
-                va="center",
-                fontsize=13,
-                weight="bold",
-                color="#111827",
-            )
+            ax.set_title("技能/能力出现频次",
+                         fontsize=16, pad=18, weight='bold', color='#1F2937')
+            ax.set_xlabel("技能/能力名称", fontsize=12, labelpad=10, color='#374151')
+            ax.set_ylabel("出现次数", fontsize=12, labelpad=10, color='#374151')
 
-        plt.subplots_adjust(left=0.22, right=0.95, top=0.88, bottom=0.12)
-        plt.savefig(save_path, dpi=180, bbox_inches="tight")
-        plt.close()
+            if n_skills <= 10:
+                rotation = 30
+                fontsize = 11
+            elif n_skills <= 20:
+                rotation = 40
+                fontsize = 10
+            else:
+                rotation = 45
+                fontsize = 9
+
+            ax.set_xticklabels(labels, rotation=rotation, ha='right', fontsize=fontsize, color='#4B5563')
+            ax.tick_params(axis='x', pad=6)
+            ax.tick_params(axis='y', labelsize=11, colors='#4B5563', pad=6)
+
+            # Y轴强制整数刻度
+            ax.yaxis.set_major_locator(plt.MaxNLocator(integer=True))
+
+            # 网格线：仅显示Y轴横向网格
+            ax.grid(axis='y', linestyle='-', alpha=0.3, color='#E5E7EB', zorder=0)
+
+            # 隐藏多余边框
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False)
+            ax.spines['left'].set_color('#D1D5DB')
+            ax.spines['bottom'].set_color('#D1D5DB')
+
+            # Y轴范围留出空间放数值标签
+            max_value = max(values) if values else 1
+            ax.set_ylim(0, max_value + max(1, max_value * 0.15))
+
+            # 数值标签放在柱子顶部
+            for bar in bars:
+                bar_height = bar.get_height()
+                ax.text(
+                    bar.get_x() + bar.get_width() / 2,
+                    bar_height + max(0.1, max_value * 0.02),
+                    f"{int(bar_height)}",
+                    ha='center', va='bottom',
+                    fontsize=9, weight='semibold',
+                    color='#111827'
+                )
+
+            # 调整边距，留出足够空间给旋转后的X轴标签
+            plt.tight_layout(rect=[0.06, 0.2, 0.97, 0.94])
+            plt.savefig(save_path)
+            plt.close(fig)
 
         return True
 
     def plot_job_match_heatmap(self, resumes, save_path):
         valid_resumes = [r for r in resumes if r.skills or r.education]
-
         if not valid_resumes:
             return False
 
@@ -1269,28 +1308,80 @@ class ReportGenerator:
 
         data = np.array(matrix)
 
-        fig_width = max(22, len(jobs) * 0.95)
-        fig_height = max(8, len(names) * 0.55 + 3)
+        try:
+            import tkinter as tk
+            root = tk.Tk()
+            screen_width = min(root.winfo_screenwidth(), 1920)
+            screen_height = min(root.winfo_screenheight(), 1080)
+            root.destroy()
+        except:
+            screen_width, screen_height = 1600, 900
 
-        plt.figure(figsize=(fig_width, fig_height))
+        base_width = screen_width / 100
+        base_height = screen_height / 150
+        fig_width = min(max(base_width, len(jobs) * 0.85), 18)  # 最大宽度18英寸
+        fig_height = min(max(base_height, len(names) * 0.45 + 3), 14)  # 最大高度14英寸
 
-        im = plt.imshow(data, cmap="YlGnBu", aspect="auto", vmin=0, vmax=100)
-        cbar = plt.colorbar(im, fraction=0.018, pad=0.012)
-        cbar.set_label("岗位匹配分", fontsize=15, labelpad=12)
-        cbar.ax.tick_params(labelsize=12)
+        with plt.rc_context({
+            'font.sans-serif': ['PingFang SC', 'Microsoft YaHei', 'SimHei', 'DejaVu Sans'],
+            'axes.unicode_minus': False,
+            'font.family': 'sans-serif',
+            'savefig.dpi': 180,
+            'savefig.bbox': 'tight',
+            'savefig.facecolor': 'white'
+        }):
+            fig, ax = plt.subplots(figsize=(fig_width, fig_height), facecolor='#FAFAFA')
+            ax.set_facecolor('#FAFAFA')
 
-        plt.xticks(range(len(jobs)), jobs, rotation=38, ha="right", fontsize=11)
-        plt.yticks(range(len(names)), names, fontsize=12)
-        plt.title("候选人与多类型岗位匹配热力图", fontsize=24, pad=24, weight="bold")
+            cmap = plt.cm.get_cmap('RdYlBu_r', 100)
 
-        ax = plt.gca()
-        ax.set_xlabel("推荐岗位", fontsize=14, labelpad=16)
-        ax.set_ylabel("候选人", fontsize=14, labelpad=16)
-        ax.tick_params(axis="both", length=0)
+            min_score = np.min(data) if data.size > 0 else 0
+            max_score = np.max(data) if data.size > 0 else 100
+            vmin = max(0, min_score - 10)
+            vmax = min(100, max_score + 10)
 
-        plt.subplots_adjust(left=0.10, right=0.96, top=0.88, bottom=0.34)
-        plt.savefig(save_path, dpi=200, bbox_inches="tight")
-        plt.close()
+            im = ax.imshow(data, cmap=cmap, aspect='auto', vmin=vmin, vmax=vmax, zorder=2)
+
+            # 优化颜色条
+            cbar = fig.colorbar(im, ax=ax, fraction=0.02, pad=0.012)
+            cbar.set_label("岗位匹配分", fontsize=13, labelpad=10, color='#374151')
+            cbar.ax.tick_params(labelsize=10, colors='#4B5563')
+            cbar.outline.set_visible(False)
+
+            ax.set_xticks(range(len(jobs)))
+            ax.set_xticklabels(jobs, rotation=35, ha='right', fontsize=10, color='#4B5563')
+            ax.set_yticks(range(len(names)))
+            ax.set_yticklabels(names, fontsize=11, color='#4B5563')
+
+            ax.set_title("多专业岗位匹配热力图",
+                         fontsize=18, pad=25, weight='bold', color='#1F2937')
+            ax.set_xlabel("推荐岗位", fontsize=12, labelpad=15, color='#374151')
+            ax.set_ylabel("候选人", fontsize=12, labelpad=15, color='#374151')
+
+            # 更细的单元格边框
+            ax.tick_params(axis='both', length=0, pad=8)
+            ax.set_xticks(np.arange(len(jobs) + 1) - 0.5, minor=True)
+            ax.set_yticks(np.arange(len(names) + 1) - 0.5, minor=True)
+            ax.grid(which='minor', color='white', linestyle='-', linewidth=1.2, zorder=1)
+            ax.tick_params(which='minor', bottom=False, left=False)
+
+            for spine in ax.spines.values():
+                spine.set_visible(False)
+
+            # 优化文字颜色切换阈值，适配新配色
+            for i in range(len(names)):
+                for j in range(len(jobs)):
+                    score = data[i, j]
+                    # 中间黄色区域用黑色文字，两端红/蓝用白色文字
+                    text_color = 'white' if (score < 40 or score > 70) else '#1F2937'
+                    ax.text(j, i, f"{int(score)}",
+                            ha='center', va='center',
+                            fontsize=9, weight='medium',
+                            color=text_color)
+
+            plt.tight_layout(rect=[0.07, 0.25, 0.97, 0.92])
+            plt.savefig(save_path)
+            plt.close(fig)
 
         return True
 
@@ -1344,7 +1435,7 @@ class ReportGenerator:
                 )
                 item["reason"] = self._recommend_reason(item)
 
-            # 关键修改：该候选人如果没有任何有效匹配岗位，就不进入推荐表。
+            # 该候选人如果没有任何有效匹配岗位，就不进入推荐表。
             if matches:
                 results.append({
                     "name": resume.name or "未识别姓名",
@@ -1644,7 +1735,6 @@ RESULT_TEMPLATE = """
         .progress { width: 150px; height: 9px; background: #e5e7eb; border-radius: 999px; overflow: hidden; margin-top: 7px; }
         .progress-inner { height: 100%; background: linear-gradient(90deg, #2563eb, #10b981); border-radius: 999px; }
 
-        /* 关键修改：两个可视化图改为上下两行，每个图独占一行 */
         .charts-layout { display: grid; grid-template-columns: 1fr; gap: 24px; align-items: stretch; }
         .chart-card { border: 1px solid #edf2f7; border-radius: 20px; padding: 18px; background: #fbfdff; overflow: auto; }
         .chart-title { font-size: 17px; font-weight: 900; margin-bottom: 14px; color: #111827; }
@@ -1684,7 +1774,7 @@ RESULT_TEMPLATE = """
             <div class="stat-card"><div class="stat-value">{{ overview.unique_skills }}</div><div class="stat-label">技能/能力种类</div></div>
             <div class="stat-card"><div class="stat-value">{{ overview.avg_skills }}</div><div class="stat-label">人均能力数</div></div>
             <div class="stat-card"><div class="stat-value">{{ overview.job_count }}</div><div class="stat-label">岗位库数量</div></div>
-            <div class="stat-card"><div class="stat-value">{{ overview.displayed_people }}</div><div class="stat-label">有有效推荐人数</div></div>
+            <div class="stat-card"><div class="stat-value">{{ overview.displayed_people }}</div><div class="stat-label">有效推荐人数</div></div>
             <div class="stat-card"><div class="stat-value">{{ overview.failed_files }}</div><div class="stat-label">未提取文本文件</div></div>
             <div class="stat-card"><div class="stat-value">{{ overview.top_skill }}</div><div class="stat-label">最高频能力</div></div>
         </div>
