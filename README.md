@@ -64,7 +64,9 @@ python app.py
 ## 功能截图
 ### 1. 首页拖拽上传界面
 支持按住 Ctrl 多选文件，或直接拖拽整个文件夹到上传区域
-![主界面](./UPLOAD_FILES.png)
+<p align="center">
+  <img src="./UPLOAD_FILES.png" width="600">
+</p>
 
 ### 2. 批量解析结果列表
 展示所有简历的核心信息，支持按姓名、技能等字段快速筛选
