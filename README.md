@@ -62,22 +62,28 @@ python app.py
 
 ## 功能截图
 ### 1. 首页拖拽上传界面
-支持按住 Ctrl 多选文件，或直接拖拽整个文件夹到上传区域
+支持多选文件，或直接拖拽整个文件夹到上传区域
 <p align="center">
   <img src="./UPLOAD_FILES.png" width="600">
 </p>
 
 ### 2. 批量解析结果列表
-展示所有简历的核心信息，支持按姓名、技能等字段快速筛选
-
+展示所有简历的核心信息
+<p align="center">
+  <img src="./RESULT_TABLE.png" width="600">
+</p>
 
 ### 3. 技能分布统计
 基于NumPy向量化统计，自动生成技能分布柱状图
-
+<p align="center">
+  <img src="./SKILL_F.png" width="600">
+</p>
 
 ### 4. 岗位匹配度热力图
 根据自定义岗位要求，自动计算每个候选人的匹配度并可视化
-
+<p align="center">
+  <img src="./HEAT_MAP.png" width="600">
+</p>
 
 ## 核心功能详解
 ### 1. 4 层姓名提取逻辑
